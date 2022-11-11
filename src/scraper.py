@@ -1,5 +1,8 @@
 from time import sleep
 from datetime import date, timedelta, datetime
+import configparser
+import requests
+import pandas as pd
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -8,12 +11,24 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
 
+import sys
+sys.path.append("..")
+
+import src.utils as utils
+
 options = webdriver.FirefoxOptions()
 options.headless = True
 
 today = str(date.today())
 now = str(datetime.now())
-tomorrow = str(date.today() + timedelta(days=1))
+tomorrow = str(datetime.now() + timedelta(days=1))
+
+city_to_stid = {
+    "NYC":"knyc",
+    "CHI":"kmdw"
+}
+
+synoptic_base_url = "https://api.synopticdata.com/v2/stations/timeseries?"
 
 days_of_week = (
     "Monday",
@@ -55,6 +70,7 @@ def TWC_scraper(driver, city, tomorrow, now):
         WebDriverWait(driver, 20).until(ec.element_to_be_clickable((By.XPATH, '//*[@id="WxuHeaderLargeScreen-header-9944ec87-e4d4-4f18-b23e-ce4a3fd8a3ba"]/header/div/div[2]/div[2]/button'))).click()
         WebDriverWait(driver, 20).until(ec.element_to_be_clickable((By.XPATH, '//*[@id="UnitSelectorTabs-tab_0"]'))).click()
     except:
+        print('should already be fahrenheit')
         pass
         
     k = driver.find_elements(By.XPATH, "/html/body/div[1]/main/div[2]/main/div[1]/section/div[2]/details[2]/summary/div/div/div[1]/span[1]")
@@ -165,6 +181,9 @@ def scrape_websites():
     driver = webdriver.Firefox(executable_path="/home/heath/bin/geckodriver", options=options)
     driver.implicitly_wait(15)
 
+
+    # super janky but I don't know any other way tomake it think it's fahrenheit
+    TWC_scraper(driver, "CHI", tomorrow, now)
     to_write.append(TWC_scraper(driver, "CHI", tomorrow, now))
     to_write.append(TWC_scraper(driver, "NYC", tomorrow, now))
     to_write.append(accuweather_scraper(driver, "NYC", tomorrow, now))
@@ -177,3 +196,59 @@ def scrape_websites():
     driver.close()
 
     return to_write
+
+
+### Daily Highs Zone
+
+def format_date(date):
+    """YYYY-MM-DD -> YYYYMMDD0001"""
+    
+    date_now = date.replace("-", "")
+    
+    return date_now + "0001"
+
+
+def get_token():
+    config = configparser.ConfigParser()
+    config_path = utils.root_path / "config"
+    config.read(str(config_path))
+    return config["synoptic"]["token"]
+
+def format_url(city, start, end):
+    """
+    Parameters:
+    city - string: either 'NYC' or 'CHI'
+    start - a date in format YYYY-MM-DD
+    end - string: either 'today' or date in format YYYY-MM-DD"""
+    
+    stid = city_to_stid[city]
+    
+    start = format_date(start)
+    
+    if end == 'today':
+        end =  datetime.now().strftime("%Y%m%d%H%M")
+    else:
+        end = format_date(end)
+        
+    token = get_token()
+    
+    final_url = f"{synoptic_base_url}&stid={stid}&start={start}&units=temp|F&end={end}&showemptystations=1&token={token}"
+    
+    return final_url
+
+def date_dataframe(final_url):
+    r = requests.get(final_url)
+    if not r.ok:
+        print("Error")
+        return
+    
+    r_json = r.json()
+    
+    date_time = r_json["STATION"][0]["OBSERVATIONS"]['date_time']
+    highs = r_json["STATION"][0]["OBSERVATIONS"]['air_temp_high_24_hour_set_1']
+    k = pd.Series(highs, index=date_time).dropna()
+    df = k.to_frame()
+    df = df.shift(-1).dropna()
+    df.columns = ["temp_float"]
+    df["temp_int"] = df["temp_float"].round().astype(int)
+    return df
