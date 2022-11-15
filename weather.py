@@ -5,7 +5,7 @@ def update_highs(city):
     start_date = database.most_recent_high_date(city)
     final_url = scraper.format_url(city, start_date, "today")
     df = scraper.date_dataframe(final_url)
-    to_write = database.prep_to_write(df, "CHI", start_date)
+    to_write = database.prep_to_write(df, city, start_date)
     database.write_high_temps(to_write)
 
 
