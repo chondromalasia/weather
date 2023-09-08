@@ -2,6 +2,8 @@ import sqlite3
 from sqlite3 import Error 
 import sys
 
+import pandas as pd
+
 import src.scraper as scraper
 import src.utils as utils
 
@@ -99,5 +101,29 @@ def most_recent_high_date(city):
     conn.close()
 
     return(start_date)
+
+def forecasts_and_observations():
+    """Get every forecast and observation"""
+
+    conn = sql_connection()
+
+    query = """SELECT forecasts.CITY, 
+            date(FORECAST_DATE) as forecast_date, 
+            PLATFORM, 
+            forecasts.TEMPERATURE as forecast_temperature,
+            date(DATE) as observed_date,
+            observed_temp.TEMPERATURE as observed_temperature
+            FROM forecasts
+            LEFT JOIN observed_temp
+            ON forecasts.city = observed_temp.city
+            AND date(forecasts.forecast_date) = date(observed_temp.date);
+            """
+
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+
+    return df
+
+    
 
 
