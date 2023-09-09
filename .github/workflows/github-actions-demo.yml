@@ -1,0 +1,16 @@
+name: Actions Test
+run-name: ${{ github.actor }} is testing out github actions
+on: [push]
+jobs:
+  Explore-GitHub-Actions:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "beep boop ${{ github.event_name }} "
+      - name: Check out repository code
+        uses: actions/checkout@v3
+      - run: echo " ${{ github.repository }} has been cloned"
+      - name: List files
+	run: |
+          ls ${{ github.workspace }}
+      - run: echo "job's status is ${{ job.status }}"
+					
